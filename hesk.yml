@@ -1,0 +1,158 @@
+---
+- hosts: hesk
+  become: true
+  vars:
+    db_user: "root"
+    db_pass: "password"
+  tasks:
+  ######################## Install packages ########################
+    - name: Update and upgrade apt packages
+      apt:
+        upgrade: yes
+        update_cache: yes
+
+    - name: Install required system packages
+      apt:
+        pkg:
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+          - unzip
+          - php
+          - php-mysql
+          - php-fpm
+          - php-imap
+          - php-gd
+          - php-zip
+          - php-curl
+          - php-cli
+          - php-intl
+          - php-imagick
+          - php-mbstring
+          - php-cgi
+          - mariadb-server
+          - python3-pip
+          - python3-setuptools
+          - python3-mysqldb
+        state: latest
+        update_cache: true
+
+######################## Configure nginx ########################
+
+    - name: Create directory
+      file:
+        path: /var/www/hesk.dsm
+        state: directory
+
+    - name: Copy nginx config
+      copy:
+        src: hesk.dsm
+        dest: /etc/nginx/sites-available/hesk.dsm
+
+    - name: Create symbolic link
+      file:
+        src: /etc/nginx/sites-available/hesk.dsm
+        dest: /etc/nginx/sites-enabled/hesk.dsm
+        state: link
+
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+
+######################## Configure MariaDB Server ########################
+
+    - name: Sets the root password
+      mysql_user:
+        user: "{{ db_user }}"
+        password: "{{ db_pass }}"
+      ignore_errors: true
+
+    - name: Delete anonymous user for localhost
+      mysql_user:
+        user: ""
+        state: "absent"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+
+    - name: Secures root user for IPV4 localhost (127.0.0.1)
+      mysql_user:
+        user: root
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+        host: "127.0.0.1"
+
+    - name: Secures root user for localhost domain (localhost)
+      mysql_user:
+        user: root
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+        host: "localhost"
+
+    - name: Removes test database
+      mysql_db: 
+        db: test
+        state: absent
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+
+    - name: create a new database
+      mysql_db:
+        name: heskdb
+        state: present
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+
+    - name: Create database user for hesk
+      mysql_user:
+        name: hesk
+        password: my_password
+        priv: 'heskdb.*:ALL'
+        state: present
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+
+######################## Install Hesk ########################
+
+    - name: Copy hesk
+      copy:
+        src: hesk343.zip
+        dest: /tmp/hesk343.zip
+
+    - name: Copy hesk-ru
+      copy:
+        src: ru.zip
+        dest: /tmp/ru.zip
+
+    - name: Copy dump
+      copy:
+        src: data-dump.sql
+        dest: /tmp/data-dump.sql
+
+    - name: Extract hesk
+      unarchive:
+        src: /tmp/hesk343.zip
+        dest: /var/www/hesk.dsm
+        remote_src: yes
+    
+    - name: Extract ru
+      unarchive:
+        src: /tmp/ru.zip
+        dest: /var/www/hesk.dsm/language
+        remote_src: yes
+
+    - name: Change file permission
+      file:
+        path: /var/www/hesk.dsm
+        recurse: yes
+        owner: "www-data"
+        group: "www-data"
+        mode: '775'
+
+
+# Dump DB - Restore DB
+# mysqldump -u root -p heskdb > data-dump.sql
+# scp user@ip:data-dump.sql .
+# mysql -u root -p
+# CREATE DATABASE heskdb;
+# mysql -u root -p heskdb < /tmp/data-dump.sql

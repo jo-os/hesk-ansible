@@ -1,0 +1,23 @@
+server {
+    listen 80;
+    server_name hesk.dsm;
+
+    root /var/www/hesk.dsm;
+    index index.php;
+
+    access_log /var/log/nginx/hesk.access.log;
+    error_log /var/log/nginx/hesk.error.log;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
